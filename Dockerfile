@@ -27,42 +27,34 @@ RUN npm run build-docker
 # Production image, copy all the files and run next
 FROM node:${NODE_IMAGE_VERSION} AS runner
 WORKDIR /app
-
 ARG PRISMA_VERSION="7.3.0"
 ARG NODE_OPTIONS
-
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS=$NODE_OPTIONS
-
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 RUN set -x \
     && apk add --no-cache curl \
     && npm install -g pnpm@9
-    
-# Script dependencies
-RUN pnpm add --shamefully-hoist npm-run-all dotenv chalk semver \
-    prisma@${PRISMA_VERSION} \
-    @prisma/client@${PRISMA_VERSION} \
-    @prisma/adapter-pg@${PRISMA_VERSION}
 
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/generated ./generated
-
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Script dependencies — AFTER all COPYs so node_modules isn't overwritten
+RUN pnpm add --shamefully-hoist npm-run-all dotenv chalk semver \
+    prisma@${PRISMA_VERSION} \
+    @prisma/client@${PRISMA_VERSION} \
+    @prisma/adapter-pg@${PRISMA_VERSION}
+
 USER nextjs
-
 EXPOSE 3000
-
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
-
+CMD ["pnpm", "start-docker"]
 CMD ["pnpm", "start-docker"]
